@@ -1,22 +1,22 @@
-struct Chip8 {
-    registers: [u8; 16],
-    memory: [u8; 4096],
-    index: u16,
-    pc: u16,
-    stack: [u16; 16],
-    sp: u8,
-    delay_timer: u8,
-    sound_timer: u8,
-    keypad: [u8; 16],
-    video: [u32; 64 * 32],
-    opcode: u16,
-    rand_byte: rand::distributions::Uniform<u8>,
-    rng_core: rand::rngs::ThreadRng,
-    table: [fn(&mut Chip8); 0x10],
-    table_0: [fn(&mut Chip8); 0xF],
-    table_8: [fn(&mut Chip8); 0xF],
-    table_e: [fn(&mut Chip8); 0xF],
-    table_f: [fn(&mut Chip8); 0x66],
+pub struct Chip8 {
+    pub registers: [u8; 16],
+    pub memory: [u8; 4096],
+    pub index: u16,
+    pub pc: u16,
+    pub stack: [u16; 16],
+    pub sp: u8,
+    pub delay_timer: u8,
+    pub sound_timer: u8,
+    pub keypad: [u8; 16],
+    pub video: [u8; 64 * 32],
+    pub opcode: u16,
+    pub rand_byte: rand::distributions::Uniform<u8>,
+    pub rng_core: rand::rngs::ThreadRng,
+    pub table: [fn(&mut Chip8); 0x10],
+    pub table_0: [fn(&mut Chip8); 0xF],
+    pub table_8: [fn(&mut Chip8); 0xF],
+    pub table_e: [fn(&mut Chip8); 0xF],
+    pub table_f: [fn(&mut Chip8); 0x66],
 }
 
 use std::arch::x86_64::_MM_FROUND_NINT;
@@ -49,7 +49,7 @@ const FONTSET: [u8; FONTSET_SIZE] = [
 ];
 
 impl Chip8 {
-    fn load_rom(&mut self, filename: &str) -> Result<(), std::io::Error> {
+    pub fn load_rom(&mut self, filename: &str) -> Result<(), std::io::Error> {
         // Open the file as a binary read-only stream
         //  and move the file pointer to the end
         let mut file = File::open(filename)?;
@@ -73,7 +73,7 @@ impl Chip8 {
     }
 
     // Initialize Program Counter
-    fn new(&mut self) -> Chip8 {
+    pub fn new() -> Chip8 {
         let mut memory = [0; 4096];
         
         // Load fonts into memory
@@ -483,4 +483,26 @@ impl Chip8 {
         }
     }
 
+    // Cycle
+    pub fn cycle(&mut self) {
+        // Fetch next instruction
+        self.opcode = ((self.memory[self.pc as usize] << 8) 
+            | self.memory[(self.pc + 1) as usize]) as u16;
+        
+        // Increment pc before execution
+        self.pc += 2;
+
+        // Get the instruction and execute
+        self.table[((self.opcode & 0xF000) >> 12) as usize](self);
+
+        // Decrement the delay timer if set
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        // Decrement the sound timer if set
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
+    }
 }
