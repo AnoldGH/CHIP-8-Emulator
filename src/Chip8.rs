@@ -12,6 +12,11 @@ struct Chip8 {
     opcode: u16,
     rand_byte: rand::distributions::Uniform<u8>,
     rng_core: rand::rngs::ThreadRng,
+    table: [fn(&mut Chip8); 0x10],
+    table_0: [fn(&mut Chip8); 0xF],
+    table_8: [fn(&mut Chip8); 0xF],
+    table_e: [fn(&mut Chip8); 0xF],
+    table_f: [fn(&mut Chip8); 0x66],
 }
 
 use std::arch::x86_64::_MM_FROUND_NINT;
@@ -80,7 +85,7 @@ impl Chip8 {
         let rand_byte = rand::distributions::Uniform::new(0, 255);
         let rng_core = rand::thread_rng();
 
-        Chip8 {
+        let mut chip8 = Chip8 {
             registers: [0; 16],
             memory,
             index: 0,
@@ -94,7 +99,79 @@ impl Chip8 {
             opcode: 0,
             rand_byte,
             rng_core,
-        }
+            table: [Chip8::op_null; 0x10],
+            table_0: [Chip8::op_null; 0xF],
+            table_8: [Chip8::op_null; 0xF],
+            table_e: [Chip8::op_null; 0xF],
+            table_f: [Chip8::op_null; 0x66],
+        };
+
+        chip8.table[0x0] = Chip8::table_0;
+        chip8.table[0x1] = Chip8::op_1nnn;
+        chip8.table[0x2] = Chip8::op_2nnn;
+        chip8.table[0x3] = Chip8::op_3xkk;
+        chip8.table[0x4] = Chip8::op_4xkk;
+        chip8.table[0x5] = Chip8::op_5xy0;
+        chip8.table[0x6] = Chip8::op_6xkk;
+        chip8.table[0x7] = Chip8::op_7xkk;
+        chip8.table[0x8] = Chip8::table_8;
+        chip8.table[0x9] = Chip8::op_9xy0;
+        chip8.table[0xA] = Chip8::op_annn;
+        chip8.table[0xB] = Chip8::op_bnnn;
+        chip8.table[0xC] = Chip8::op_cxkk;
+        chip8.table[0xD] = Chip8::op_dxyn;
+        chip8.table[0xE] = Chip8::table_e;
+        chip8.table[0xF] = Chip8::table_f;
+
+        // Sub-tables
+        chip8.table_0[0x0] = Chip8::op_00e0;
+        chip8.table_0[0xE] = Chip8::op_00ee;
+
+        chip8.table_8[0x0] = Chip8::op_8xy0;
+        chip8.table_8[0x1] = Chip8::op_8xy1;
+        chip8.table_8[0x2] = Chip8::op_8xy2;
+        chip8.table_8[0x3] = Chip8::op_8xy3;
+        chip8.table_8[0x4] = Chip8::op_8xy4;
+        chip8.table_8[0x5] = Chip8::op_8xy5;
+        chip8.table_8[0x6] = Chip8::op_8xy6;
+        chip8.table_8[0x7] = Chip8::op_8xy7;
+        chip8.table_8[0xE] = Chip8::op_8xye;
+
+        chip8.table_e[0x1] = Chip8::op_exa1;
+        chip8.table_e[0xE] = Chip8::op_ex9e;
+
+        chip8.table_f[0x07] = Chip8::op_fx07;
+        chip8.table_f[0x0A] = Chip8::op_fx0a;
+        chip8.table_f[0x15] = Chip8::op_fx15;
+        chip8.table_f[0x18] = Chip8::op_fx18;
+        chip8.table_f[0x1E] = Chip8::op_fx1e;
+        chip8.table_f[0x29] = Chip8::op_fx29;
+        chip8.table_f[0x33] = Chip8::op_fx33;
+        chip8.table_f[0x55] = Chip8::op_fx55;
+        chip8.table_f[0x65] = Chip8::op_fx65;
+
+        chip8
+    }
+
+    // Function pointer helper functions
+    fn table_0(&mut self) {
+        self.table_0[(self.opcode & 0x000F) as usize](self);
+    }
+
+    fn table_8(&mut self) {
+        self.table_8[(self.opcode & 0x000F) as usize](self);
+    }
+    
+    fn table_e(&mut self) {
+        self.table_e[(self.opcode & 0x000F) as usize](self);
+    }
+    
+    fn table_f(&mut self) {
+        self.table_f[(self.opcode & 0x000F) as usize](self);
+    }
+
+    fn op_null(&mut self) {
+        return;
     }
 
     fn op_00e0(&mut self) {
@@ -267,6 +344,11 @@ impl Chip8 {
         self.pc = self.registers[0] as u16 + address;
     }
 
+    fn op_bnnn(&mut self) {
+        let address: u16 = self.opcode & 0x0FFF;
+        self.pc = self.registers[0] as u16 + address;
+    }
+
     fn op_cxkk(&mut self) {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
         let byte: u8 = (self.opcode & 0x00FF) as u8;
@@ -357,7 +439,7 @@ impl Chip8 {
         self.sound_timer = self.registers[vx as usize];
     }
 
-    fn op_fx1E(&mut self) {
+    fn op_fx1e(&mut self) {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
         self.index += (self.registers[vx as usize]) as u16;
     }
