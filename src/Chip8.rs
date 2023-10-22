@@ -48,6 +48,9 @@ const FONTSET: [u8; FONTSET_SIZE] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+pub const VIDEO_HEIGHT: u8 = 32;
+pub const VIDEO_WIDTH: u8 = 64;
+
 impl Chip8 {
     pub fn load_rom(&mut self, filename: &str) -> Result<(), std::io::Error> {
         // Open the file as a binary read-only stream
@@ -362,8 +365,8 @@ impl Chip8 {
         let height: u8 = (self.opcode & 0x000F) as u8;
 
         // Wrap if going beyond screen boundaries
-        let x_pos: u8 = self.registers[vx as usize] % VIDEO_WIDTH;
-        let y_pos: u8 = self.registers[vy as usize] % VIDEO_HEIGHT;
+        let x_pos: u8 = self.registers[vx as usize] % VIDEO_WIDTH as u8;
+        let y_pos: u8 = self.registers[vy as usize] % VIDEO_HEIGHT as u8;
 
         self.registers[0xF] = 0;
 
@@ -374,19 +377,19 @@ impl Chip8 {
             for col in 0..8 {
                 let sprite_pixel: u8 = sprite_byte & (0x80 >> col);
                 let screen_pixel_index: usize
-                    = ((y_pos + row) * VIDEO_WIDTH + (x_pos + col)) as usize;
+                    = ((y_pos + row) * VIDEO_WIDTH as u8 + (x_pos + col)) as usize;
                 let screen_pixel 
                     = &mut self.video[screen_pixel_index];
 
                 // Sprite pixel is on
                 if sprite_pixel != 0 {
                     // #Collision: screen pixel also on
-                    if *screen_pixel == 0xFFFFFFFF {
+                    if *screen_pixel == 0xFF {
                         self.registers[0xF] = 1;
                     }
 
                     // Effectively XOR with the sprite pixel
-                    *screen_pixel ^= 0xFFFFFFFF;
+                    *screen_pixel ^= 0xFF;
                 }
             }
         }
@@ -486,8 +489,8 @@ impl Chip8 {
     // Cycle
     pub fn cycle(&mut self) {
         // Fetch next instruction
-        self.opcode = ((self.memory[self.pc as usize] << 8) 
-            | self.memory[(self.pc + 1) as usize]) as u16;
+        self.opcode = ((self.memory[self.pc as usize] as u16) << 8) 
+            | self.memory[(self.pc + 1) as usize] as u16;
         
         // Increment pc before execution
         self.pc += 2;
