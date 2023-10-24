@@ -19,6 +19,7 @@ pub struct Chip8 {
     pub table_f: [fn(&mut Chip8); 0x66],
 }
 
+use std;
 use std::arch::x86_64::_MM_FROUND_NINT;
 use std::{fs::File, arch::x86_64::_MM_FROUND_NEARBYINT};
 use std::io::Read;
@@ -53,6 +54,8 @@ pub const VIDEO_WIDTH: u8 = 64;
 
 impl Chip8 {
     pub fn load_rom(&mut self, filename: &str) -> Result<(), std::io::Error> {
+        eprintln!("Started loading ROM...");
+
         // Open the file as a binary read-only stream
         //  and move the file pointer to the end
         let mut file = File::open(filename)?;
@@ -65,13 +68,15 @@ impl Chip8 {
         let mut buffer = Vec::with_capacity(size);
 
         // Read the file contents into the buffer
+        eprintln!("Start reading file...");
         file.read_to_end(&mut buffer)?;
 
         // Load the ROM contents into Chip8's memory, starting at 0x200
         for (i, byte) in buffer.iter().enumerate() {
+            eprintln!("Writing in memory [{}], value {}...", START_ADDRESS as usize + i, *byte);
             self.memory[START_ADDRESS as usize + i] = *byte;
         }
-
+        
         Ok(())
     }
 
@@ -212,16 +217,16 @@ impl Chip8 {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
         let byte: u8 = (self.opcode & 0x00FF) as u8;
 
-        if self.registers[vx as usize] == byte {
+        if self.registers[vx as usize] != byte {
             self.pc += 2;
         }
     }
 
     fn op_5xy0(&mut self) {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
-        let byte: u8 = (self.opcode & 0x00FF) as u8;
+        let vy: u16 = (self.opcode & 0x00F0) >> 4;
 
-        if self.registers[vx as usize] == byte {
+        if self.registers[vx as usize] == self.registers[vy as usize] {
             self.pc += 2;
         }
     }
@@ -237,7 +242,9 @@ impl Chip8 {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
         let byte: u8 = (self.opcode & 0x00FF) as u8;
 
-        self.registers[vx as usize] += byte;
+        eprintln!("{}, {}", self.registers[vx as usize], byte);
+        self.registers[vx as usize] 
+            = self.registers[vx as usize].wrapping_add(byte);
     } 
 
     fn op_8xy0(&mut self) {
@@ -272,8 +279,8 @@ impl Chip8 {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
         let vy: u16 = (self.opcode & 0x00F0) >> 4;
 
-        let sum: u16 = (self.registers[vx as usize] 
-                + self.registers[vy as usize]) as u16;
+        let sum: u16 = self.registers[vx as usize] as u16 
+                + self.registers[vy as usize] as u16;
 
         if sum > 255 {
             self.registers[0xF] = 1;
@@ -296,7 +303,8 @@ impl Chip8 {
             self.registers[0xF] = 0;
         }
 
-        self.registers[vx as usize] -= self.registers[vy as usize];
+        // self.registers[vx as usize] -= self.registers[vy as usize];
+        self.registers[vx as usize] = self.registers[vx as usize].wrapping_sub(self.registers[vy as usize]);
     }
 
     fn op_8xy6(&mut self) {
@@ -344,7 +352,7 @@ impl Chip8 {
 
     fn op_annn(&mut self) {
         let address: u16 = self.opcode & 0x0FFF;
-        self.pc = self.registers[0] as u16 + address;
+        self.index = address;
     }
 
     fn op_bnnn(&mut self) {
@@ -377,7 +385,8 @@ impl Chip8 {
             for col in 0..8 {
                 let sprite_pixel: u8 = sprite_byte & (0x80 >> col);
                 let screen_pixel_index: usize
-                    = ((y_pos + row) * VIDEO_WIDTH as u8 + (x_pos + col)) as usize;
+                    = (y_pos + row) as usize * VIDEO_WIDTH as usize
+                        + (x_pos + col) as usize;
                 let screen_pixel 
                     = &mut self.video[screen_pixel_index];
 
@@ -444,7 +453,7 @@ impl Chip8 {
 
     fn op_fx1e(&mut self) {
         let vx: u16 = (self.opcode & 0x0F00) >> 8;
-        self.index += (self.registers[vx as usize]) as u16;
+        self.index += self.registers[vx as usize] as u16;
     }
 
     fn op_fx29(&mut self) {
@@ -496,7 +505,7 @@ impl Chip8 {
         self.pc += 2;
 
         // Get the instruction and execute
-        self.table[((self.opcode & 0xF000) >> 12) as usize](self);
+        self.table[(self.opcode & 0xF000) as usize >> 12](self);
 
         // Decrement the delay timer if set
         if self.delay_timer > 0 {

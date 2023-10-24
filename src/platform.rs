@@ -18,17 +18,16 @@ impl<'tex> Platform<'tex> {
         video_subsystem: &VideoSubsystem,
         title: &str,
         window_size: (u32, u32),
+        canvas: Canvas<Window>,
         texture_creator: &'tex mut TextureCreator<WindowContext>,
         texture_size: (u32, u32),
         event_pump: EventPump,
     ) -> Self {
-        let window: Window = video_subsystem
-            .window(title, window_size.0, window_size.1)
-            .position_centered()
-            .build()
-            .unwrap();
-
-        let canvas = window.into_canvas().accelerated().build().unwrap();
+        // let window: Window = video_subsystem
+        //     .window(title, window_size.0, window_size.1)
+        //     .position_centered()
+        //     .build()
+        //     .unwrap();
 
         let texture: Texture<'_> = texture_creator
             .create_texture_streaming(PixelFormatEnum::RGBA8888, texture_size.0, texture_size.1)
@@ -41,8 +40,17 @@ impl<'tex> Platform<'tex> {
         }
     }
 
-    pub fn update(&mut self, pixel_data: &[u8], pitch: usize) {
-        self.texture.update(None, pixel_data, pitch).unwrap();
+    pub fn update(&mut self, pixel_data: &mut [u8], pitch: usize) {
+        match self.texture.update(None, pixel_data, pitch) {
+            Ok(_) => {
+
+            },
+            Err(e) => {
+                eprintln!("Error updating texture: {}", e);
+            }
+        };
+        eprintln!("Texture updated.");
+
         self.canvas.clear();
         self.canvas.copy(&self.texture, None, None).unwrap();
         self.canvas.present();
